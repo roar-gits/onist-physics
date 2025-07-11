@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RGE Resonance Playground</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+</head>
+<body>
+<script>
+// ========== RGE Resonance Playground (p5.js v1) ==========
+
+let nodes = [];
+let dragging = null;
+
+const consts = { "π": Math.PI, "φ": (1 + Math.sqrt(5)) / 2, "e": Math.E, "√2": Math.SQRT2 };
+const tolerance = 0.01;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  nodes.push(new MassNode(1.0, 0, 50, width/2 - 150, height/2, random2D().mult(1)));
+  nodes.push(new MassNode(consts["π"], 1, 50, width/2 + 150, height/2, random2D().mult(1)));
+  nodes.push(new MassNode(consts["φ"], 2, 50, width/2, height/2 - 150, random2D().mult(1)));
+}
+
+function draw() {
+  background(20);
+  let forces = computePhaseForces();
+  for (let i = 0; i < nodes.length; i++) {
+    let n = nodes[i];
+    n.vel.add(p5.Vector.mult(forces[i], deltaTime * 0.001));
+    n.pos.add(p5.Vector.mult(n.vel, deltaTime * 0.001));
+    n.updatePhase(deltaTime * 0.001);
+  }
+
+  let log = detectSymbolicResonance();
+  log.forEach(r => {
+    fill(255, 255, 0);
+    noStroke();
+    textSize(18);
+    textAlign(CENTER);
+    text(r.label, width / 2, 30 + Object.keys(consts).indexOf(r.label.split('≈')[1]) * 24);
+  });
+
+  stroke(100);
+  nodes.forEach(n => nodeTrails(n));
+  nodes.forEach(n => n.display());
+}
+
+function mousePressed() {
+  nodes.forEach(n => {
+    if (dist(mouseX, mouseY, n.pos.x, n.pos.y) < n.A) {
+      dragging = n;
+    }
+  });
+}
+
+function mouseDragged() {
+  if (dragging) {
+    dragging.pos.set(mouseX, mouseY);
+    dragging.vel.mult(0);
+  }
+}
+
+function mouseReleased() {
+  dragging = null;
+}
+
+function MassNode(freq, phase, amplitude, x, y, vel) {
+  this.omega = freq;
+  this.phi = phase;
+  this.A = amplitude;
+  this.pos = createVector(x, y);
+  this.vel = vel.copy();
+  this.updatePhase = function(dt) { this.phi += this.omega * dt; };
+  this.display = function() {
+    stroke(200);
+    fill(50, 100, 200, 150);
+    ellipse(this.pos.x, this.pos.y, this.A);
+  };
+}
+
+function computePhaseForces() {
+  return nodes.map((ni, i) => {
+    let f = createVector();
+    nodes.forEach((nj, j) => {
+      if (i !== j) {
+        let delta = p5.Vector.sub(nj.pos, ni.pos);
+        let d = delta.mag() + 0.01;
+        let pd = nj.phi - ni.phi;
+        let tension = sin(pd) * nj.A / (d * d);
+        f.add(delta.normalize().mult(tension));
+      }
+    });
+    return f;
+  });
+}
+
+function detectSymbolicResonance() {
+  let results = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      let ratio = nodes[i].omega / nodes[j].omega;
+      for (let name in consts) {
+        if (abs(ratio - consts[name]) < tolerance) {
+          results.push({ label: `${i+1}:${j+1} ≈ ${name}`, value: ratio });
+        }
+      }
+    }
+  }
+  return results;
+}
+
+function nodeTrails(node) {
+  if (!node.history) node.history = [];
+  node.history.push(node.pos.copy());
+  if (node.history.length > 200) node.history.shift();
+  noFill();
+  stroke(80);
+  beginShape();
+  node.history.forEach(v => vertex(v.x, v.y));
+  endShape();
+}
+</script>
+</body>
+</html>
